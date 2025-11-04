@@ -1,0 +1,27 @@
+{
+  "devDependencies": {
+    "@playwright/test": "^1.55.1",
+    "@types/node": "^24.6.0",
+    "playwright": "^1.55.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.899.0",
+    "@aws-sdk/lib-storage": "^3.899.0",
+    "@modelcontextprotocol/sdk": "^1.18.2",
+    "dotenv": "^17.2.2"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/scripts/upload-artifacts.js",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report",
+    "upload-artifacts": "npm run build && npm run start",
+    "test:upload": "npm test && npm run upload-artifacts"
+  },
+  "type": "module"
+}
