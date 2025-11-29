@@ -1,0 +1,391 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { 
+  CheckCircle, 
+  Clock, 
+  FileText, 
+  AlertOctagon, 
+  Layers, 
+  Box, 
+  ZoomIn, 
+  ZoomOut, 
+  Move, 
+  ChevronDown, 
+  ChevronUp,
+  Layout,
+  FolderOpen, // New icon for Groups
+  Folder
+} from 'lucide-react';
+
+// --- MOCK DATA ---
+const generateData = () => {
+  return {
+    id: 'root',
+    name: 'iReceivables-Internal',
+    type: 'application',
+    stats: { total: 0, approved: 0, draft: 0, deprecated: 0 }, // Will be calculated
+    children: [
+      { id: 'mod-1', name: 'Client Profiles', type: 'module', stats: { total: 52, approved: 4, draft: 48, deprecated: 0 }, children: [] },
+      { id: 'mod-2', name: 'ESIssueCredit', type: 'module', stats: { total: 25, approved: 0, draft: 25, deprecated: 0 }, children: [] },
+      { id: 'mod-3', name: 'CanadaIssueCredit', type: 'module', stats: { total: 25, approved: 0, draft: 25, deprecated: 0 }, children: [] }, // Added to show dynamic grouping
+      { id: 'mod-4', name: 'MultiOrgIssueCredit', type: 'module', stats: { total: 24, approved: 0, draft: 24, deprecated: 0 }, children: [] },
+      { id: 'mod-5', name: 'Account Balance', type: 'module', stats: { total: 24, approved: 24, draft: 0, deprecated: 0 }, children: [] },
+      { id: 'mod-6', name: 'Account Activity', type: 'module', stats: { total: 15, approved: 0, draft: 15, deprecated: 0 }, children: [] },
+      { id: 'mod-7', name: 'InvoiceTracker', type: 'module', stats: { total: 12, approved: 0, draft: 12, deprecated: 0 }, children: [] },
+      { id: 'mod-8', name: 'ReportExport', type: 'module', stats: { total: 8, approved: 8, draft: 0, deprecated: 0 }, children: [] },
+      { id: 'mod-9', name: 'MultiOrgClientReportExport', type: 'module', stats: { total: 7, approved: 7, draft: 0, deprecated: 0 }, children: [] },
+      { id: 'mod-10', name: 'Payment', type: 'module', stats: { total: 5, approved: 1, draft: 4, deprecated: 0 }, children: [] }
+    ]
+  };
+};
+
+// --- DYNAMIC GROUPING LOGIC ---
+const groupModulesDynamically = (rootNode) => {
+  if (!rootNode.children) return rootNode;
+
+  const originalChildren = [...rootNode.children];
+  const groups = {}; // Map<GroupName, Node[]>
+  const processedIds = new Set();
+
+  // Helper: Find Longest Common Substring or shared word
+  const findCommonPattern = (str1, str2) => {
+    const s1 = str1.replace(/\s/g, ''); // Remove spaces for comparison (Account Balance -> AccountBalance)
+    const s2 = str2.replace(/\s/g, '');
+
+    // 1. Check Suffix (Strongest indicator for Modules like IssueCredit)
+    for (let i = 0; i < s1.length; i++) {
+        const sub = s1.substring(i);
+        if (sub.length > 5 && s2.endsWith(sub)) {
+            // Found suffix match (e.g., "IssueCredit")
+            // Add space before caps for nice label
+            return sub.replace(/([A-Z])/g, ' $1').trim();
+        }
+    }
+
+    // 2. Check Prefix (Strong indicator for Functional Areas like Account)
+    for (let i = s1.length; i > 0; i--) {
+        const sub = s1.substring(0, i);
+        if (sub.length > 4 && s2.startsWith(sub)) {
+             return sub.replace(/([A-Z])/g, ' $1').trim();
+        }
+    }
+    
+    // 3. Containment (ReportExport is inside MultiOrgClientReportExport)
+    if (s1.includes(s2) && s2.length > 4) return s2.replace(/([A-Z])/g, ' $1').trim();
+    if (s2.includes(s1) && s1.length > 4) return s1.replace(/([A-Z])/g, ' $1').trim();
+
+    return null;
+  };
+
+  // N^2 Comparison to find clusters
+  for (let i = 0; i < originalChildren.length; i++) {
+    const nodeA = originalChildren[i];
+    if (processedIds.has(nodeA.id)) continue;
+
+    for (let j = i + 1; j < originalChildren.length; j++) {
+      const nodeB = originalChildren[j];
+      if (processedIds.has(nodeB.id)) continue;
+
+      const pattern = findCommonPattern(nodeA.name, nodeB.name);
+      
+      if (pattern) {
+        if (!groups[pattern]) groups[pattern] = [];
+        
+        // Add A if not already added to this specific group
+        if (!groups[pattern].find(n => n.id === nodeA.id)) {
+            groups[pattern].push(nodeA);
+            processedIds.add(nodeA.id);
+        }
+        // Add B
+        if (!groups[pattern].find(n => n.id === nodeB.id)) {
+            groups[pattern].push(nodeB);
+            processedIds.add(nodeB.id);
+        }
+      }
+    }
+  }
+
+  // Construct New Children List
+  const newChildren = [];
+
+  // 1. Add Groups
+  Object.keys(groups).forEach((groupName, idx) => {
+    const cluster = groups[groupName];
+    // Aggregate Stats
+    const stats = cluster.reduce((acc, curr) => ({
+        total: acc.total + curr.stats.total,
+        approved: acc.approved + curr.stats.approved,
+        draft: acc.draft + curr.stats.draft,
+        deprecated: acc.deprecated + curr.stats.deprecated
+    }), { total: 0, approved: 0, draft: 0, deprecated: 0 });
+
+    newChildren.push({
+        id: `grp-${idx}`,
+        name: `${groupName} Group`,
+        type: 'group',
+        stats,
+        children: cluster,
+        collapsed: false // Default open to see logic
+    });
+  });
+
+  // 2. Add Ungrouped Items
+  originalChildren.forEach(child => {
+    if (!processedIds.has(child.id)) {
+        newChildren.push(child);
+    }
+  });
+
+  // Recalculate Root Stats based on new structure
+  const rootStats = newChildren.reduce((acc, curr) => ({
+        total: acc.total + curr.stats.total,
+        approved: acc.approved + curr.stats.approved,
+        draft: acc.draft + curr.stats.draft,
+        deprecated: acc.deprecated + curr.stats.deprecated
+    }), { total: 0, approved: 0, draft: 0, deprecated: 0 });
+
+  return {
+      ...rootNode,
+      stats: rootStats,
+      children: newChildren
+  };
+};
+
+
+// --- TREE NODE COMPONENT (VERTICAL) ---
+const TreeNode = ({ node, onToggle }) => {
+  const isLeaf = !node.children || node.children.length === 0;
+  
+  // Calculate Approval Rate
+  const approvalRate = node.stats.total > 0 
+    ? Math.round((node.stats.approved / node.stats.total) * 100) 
+    : 0;
+
+  // Dynamic Styles
+  let statusColor = 'border-slate-300 bg-slate-50';
+  if (approvalRate === 100) statusColor = 'border-emerald-500 bg-emerald-50';
+  else if (approvalRate > 0) statusColor = 'border-amber-400 bg-amber-50';
+
+  // Group specific styling
+  const isGroup = node.type === 'group';
+  if (isGroup) statusColor = 'border-indigo-400 bg-indigo-50 dashed-border';
+
+  return (
+    <div className="flex flex-col items-center">
+      
+      {/* 1. The Card */}
+      <div 
+        className={`
+          relative z-10 flex flex-col w-64 p-4 rounded-xl border-t-4 shadow-sm transition-all duration-200 group bg-white
+          ${statusColor} ${isGroup ? 'border-dashed border-2 border-t-4' : ''} 
+          hover:shadow-xl hover:-translate-y-1 cursor-pointer
+        `}
+        onClick={(e) => { e.stopPropagation(); onToggle(node.id); }}
+      >
+        {/* Header */}
+        <div className="flex justify-between items-start mb-3">
+          <div className="flex items-center gap-2">
+            <div className={`p-1.5 rounded-lg ${
+                isGroup ? 'bg-indigo-100 text-indigo-700' :
+                approvalRate === 100 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
+            }`}>
+               {node.type === 'application' ? <Layout size={16} /> : 
+                node.type === 'group' ? <FolderOpen size={16} /> : <Box size={16} />}
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{node.type}</span>
+          </div>
+          <div className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+            approvalRate === 100 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
+          }`}>
+            {approvalRate}% rate
+          </div>
+        </div>
+
+        {/* Title */}
+        <div className="font-bold text-slate-800 text-base mb-4 truncate" title={node.name}>
+          {node.name}
+        </div>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-3 gap-2 text-center text-xs border-t border-slate-100 pt-3">
+          <div className="flex flex-col">
+            <span className="font-bold text-slate-800 text-sm">{node.stats.total}</span>
+            <span className="text-[10px] text-slate-400 uppercase">Total</span>
+          </div>
+          <div className="flex flex-col relative">
+            <div className="absolute left-0 top-1 bottom-1 w-px bg-slate-100"></div>
+            <span className="font-bold text-emerald-600 text-sm">{node.stats.approved}</span>
+            <span className="text-[10px] text-emerald-600/70 uppercase">Appr.</span>
+            <div className="absolute right-0 top-1 bottom-1 w-px bg-slate-100"></div>
+          </div>
+          <div className="flex flex-col">
+            <span className="font-bold text-slate-500 text-sm">{node.stats.draft}</span>
+            <span className="text-[10px] text-slate-400 uppercase">Draft</span>
+          </div>
+        </div>
+
+        {/* Collapse Handle */}
+        {!isLeaf && (
+          <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 bg-white rounded-full border border-slate-200 flex items-center justify-center text-slate-400 shadow-sm z-20">
+            {node.collapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+          </div>
+        )}
+      </div>
+
+      {/* 2. Vertical Connector (Parent to Children Bar) */}
+      {!isLeaf && !node.collapsed && (
+        <div className="flex flex-col items-center">
+          <div className={`h-8 w-px ${isGroup ? 'bg-indigo-300 border-l border-dashed' : 'bg-slate-300'}`}></div>
+          
+          <div className="flex relative pt-4">
+             <div className="flex gap-8">
+              {node.children.map((child, index) => (
+                <div key={child.id} className="flex flex-col items-center relative">
+                  {/* Horizontal Connector */}
+                  <div className={`absolute top-[-2rem] left-0 right-0 h-px ${isGroup ? 'bg-indigo-300' : 'bg-slate-300'}`}
+                       style={{ 
+                         display: node.children.length === 1 ? 'none' : 'block',
+                         left: index === 0 ? '50%' : '0',
+                         right: index === node.children.length - 1 ? '50%' : '0'
+                       }}
+                  ></div>
+                  {/* Vertical line down to child */}
+                  <div className={`h-8 w-px -mt-8 ${isGroup ? 'bg-indigo-300' : 'bg-slate-300'}`}></div>
+                  
+                  <TreeNode node={child} onToggle={onToggle} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Collapsed Indicator */}
+      {!isLeaf && node.collapsed && (
+         <div className="flex flex-col items-center mt-1">
+            <div className="h-4 w-px bg-slate-300"></div>
+            <div className="text-[10px] text-slate-400 font-medium bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+               {node.children.length} items hidden
+            </div>
+         </div>
+      )}
+    </div>
+  );
+};
+
+// --- MAIN APP ---
+
+export default function App() {
+  // 1. Generate Raw Data
+  const rawData = generateData();
+  // 2. Apply Dynamic Grouping Logic
+  const [treeData, setTreeData] = useState(() => groupModulesDynamically(rawData));
+  
+  const [scale, setScale] = useState(0.85); 
+  const [position, setPosition] = useState({ x: 0, y: 50 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
+  const containerRef = useRef(null);
+
+  const toggleNode = (nodeId) => {
+    const toggleRecursive = (node) => {
+      if (node.id === nodeId) {
+        return { ...node, collapsed: !node.collapsed };
+      }
+      if (node.children) {
+        return { ...node, children: node.children.map(toggleRecursive) };
+      }
+      return node;
+    };
+    setTreeData(toggleRecursive(treeData));
+  };
+
+  const handleZoom = (delta) => setScale(prev => Math.min(Math.max(0.2, prev + delta), 2));
+
+  const handleMouseDown = (e) => {
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
+  };
+
+  const handleMouseMove = (e) => {
+    if (isDragging) {
+      setPosition({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
+    }
+  };
+
+  const handleMouseUp = () => setIsDragging(false);
+
+  useEffect(() => {
+    if (containerRef.current) {
+        const { clientWidth } = containerRef.current;
+        setPosition({ x: clientWidth / 2 - 150, y: 50 }); 
+    }
+  }, []);
+
+  return (
+    <div className="flex flex-col h-screen bg-slate-50 text-slate-800 font-sans overflow-hidden">
+      
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center shadow-sm z-20">
+        <div className="flex items-center gap-3">
+          <div className="bg-blue-600 text-white p-2 rounded-lg">
+             <Layers size={20} />
+          </div>
+          <div>
+            <h1 className="font-bold text-lg leading-tight">System Hierarchy</h1>
+            <p className="text-xs text-slate-500">Auto-Grouped Application Structure</p>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-4">
+           {/* Legend */}
+           <div className="flex gap-4 text-xs font-medium mr-4 border-r border-slate-200 pr-4 hidden md:flex">
+              <div className="flex items-center gap-1.5">
+                 <div className="w-2 h-2 rounded-full bg-indigo-100 border border-indigo-400 border-dashed"></div>
+                 <span>Dynamic Group</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                 <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                 <span>100% Approved</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                 <div className="w-2 h-2 rounded-full bg-amber-400"></div>
+                 <span>In Progress</span>
+              </div>
+           </div>
+
+           {/* Toolbar */}
+           <div className="flex bg-slate-100 rounded-lg p-1 gap-1">
+              <button onClick={() => handleZoom(-0.1)} className="p-2 hover:bg-white rounded text-slate-600" title="Zoom Out"><ZoomOut size={18}/></button>
+              <span className="flex items-center px-2 text-xs font-mono text-slate-500">{Math.round(scale * 100)}%</span>
+              <button onClick={() => handleZoom(0.1)} className="p-2 hover:bg-white rounded text-slate-600" title="Zoom In"><ZoomIn size={18}/></button>
+              <button onClick={() => {setScale(0.85); setPosition({x: window.innerWidth/2 - 150, y: 50})}} className="p-2 hover:bg-white rounded text-slate-600" title="Reset View"><Move size={18}/></button>
+           </div>
+        </div>
+      </header>
+
+      {/* Canvas */}
+      <div 
+        ref={containerRef}
+        className="flex-1 overflow-hidden relative cursor-grab active:cursor-grabbing bg-slate-50"
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        style={{ backgroundImage: 'radial-gradient(#cbd5e1 1px, transparent 1px)', backgroundSize: '24px 24px' }}
+      >
+        <div 
+          style={{ 
+            transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+            transformOrigin: 'top center',
+            transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+            width: 'fit-content'
+          }}
+          className="absolute top-0 left-0 p-10 min-w-full flex justify-center"
+        >
+          <TreeNode node={treeData} onToggle={toggleNode} />
+        </div>
+      </div>
+    </div>
+  );
+}
