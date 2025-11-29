@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pacman Loader Animation</title>
+    <style>
+        body {
+            background-color: #1a1a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: sans-serif;
+            color: #555;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* --- Loader Container --- */
+        .pacman-loader {
+            position: relative;
+            width: 200px;
+            height: 100px;
+            overflow: hidden; /* Hides the dots as they pass the left edge */
+        }
+
+        /* --- The Pacman Character --- */
+        .pacman {
+            position: absolute;
+            top: 50%;
+            left: 50px; /* Position fixed, the world moves around him */
+            width: 60px;
+            height: 60px;
+            margin-top: -30px; /* Center vertically */
+            z-index: 2;
+        }
+
+        /* The two halves of the mouth */
+        .pacman::before, .pacman::after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 50%;
+            background-color: #FFD700; /* Pacman Yellow */
+            left: 0;
+            border-radius: 30px 30px 0 0; /* Semi-circle top */
+            transform-origin: bottom center;
+            animation: chomp-top 0.4s infinite alternate ease-in-out;
+        }
+
+        .pacman::after {
+            top: 50%;
+            border-radius: 0 0 30px 30px; /* Semi-circle bottom */
+            transform-origin: top center;
+            animation: chomp-bottom 0.4s infinite alternate ease-in-out;
+        }
+
+        /* --- The Food (Dots) --- */
+        .dots {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 10px;
+            margin-top: -5px;
+            z-index: 1;
+        }
+
+        .star {
+            position: absolute;
+            right: -20px; /* Start off-screen right */
+            top: 50%;
+            margin-top: -8px; /* Center vertically (half of height) */
+            width: 16px;
+            height: 16px;
+            background-color: #fff;
+            clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+            animation: move-star 1.2s linear infinite;
+        }
+
+        /* Delay the dots to create a stream */
+        .star:nth-child(1) { animation-delay: 0s; }
+        .star:nth-child(2) { animation-delay: 0.4s; }
+        .star:nth-child(3) { animation-delay: 0.8s; }
+
+        /* --- Keyframes --- */
+        
+        /* Top half rotates up */
+        @keyframes chomp-top {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(-35deg); }
+        }
+
+        /* Bottom half rotates down */
+        @keyframes chomp-bottom {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(35deg); }
+        }
+
+        /* Stars move right to left */
+        @keyframes move-star {
+            0% { right: -20px; opacity: 1; }
+            80% { opacity: 1; }
+            100% { right: 160px; opacity: 0; } /* Disappear into mouth */
+        }
+
+        /* --- Presentation text --- */
+        .caption {
+            margin-top: 20px;
+            font-size: 0.9rem;
+            letter-spacing: 1px;
+            opacity: 0.6;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="pacman-loader">
+        <div class="pacman"></div>
+        <div class="dots">
+            <div class="star"></div>
+            <div class="star"></div>
+            <div class="star"></div>
+        </div>
+    </div>
+
+    <div class="caption">LOADING ASSETS...</div>
+
+</body>
+</html>
