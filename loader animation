@@ -1,0 +1,89 @@
+import React, { useState, useEffect } from 'react';
+
+// --- COMPONENT: PRELOADER ---
+// This component handles the 0-100% counter and the "curtain" slide-up animation.
+const Preloader = ({ onComplete }) => {
+  const [count, setCount] = useState(0);
+  const [isFinished, setIsFinished] = useState(false);
+
+  useEffect(() => {
+    // 1. Simulation of loading progress
+    const duration = 2000; // Total load time in ms (2 seconds)
+    const steps = 20;
+    const intervalTime = duration / steps;
+
+    const timer = setInterval(() => {
+      setCount((prev) => {
+        const next = prev + Math.floor(Math.random() * 15) + 1; // Random increment
+        if (next >= 100) {
+          clearInterval(timer);
+          return 100;
+        }
+        return next;
+      });
+    }, intervalTime);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    // 2. Trigger the exit animation when loading hits 100%
+    if (count === 100) {
+      // Wait a brief moment (500ms) at 100% before starting the slide up
+      const timeout = setTimeout(() => {
+        setIsFinished(true); // Triggers the CSS transform
+        
+        // Wait for the animation to finish (1000ms) before unmounting
+        setTimeout(onComplete, 1000); 
+      }, 500);
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [count, onComplete]);
+
+  return (
+    <div 
+      className={`fixed inset-0 z-[100] bg-black text-white flex items-center justify-center transition-transform duration-1000 cubic-bezier(0.76, 0, 0.24, 1) ${
+        isFinished ? '-translate-y-full' : 'translate-y-0'
+      }`}
+    >
+      <div className="relative">
+        <div className="text-8xl md:text-9xl font-sans font-bold tracking-tighter tabular-nums">
+          {count}%
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- MAIN APP (DEMO) ---
+export default function App() {
+  const [isLoading, setIsLoading] = useState(true);
+
+  return (
+    <div className="min-h-screen bg-zinc-100 font-sans text-zinc-900">
+      
+      {/* Conditionally render the Preloader */}
+      {isLoading && (
+        <Preloader onComplete={() => setIsLoading(false)} />
+      )}
+
+      {/* Actual Site Content (Revealed after loader) */}
+      <div className="flex flex-col items-center justify-center min-h-screen p-8 text-center">
+        <h1 className="text-6xl font-bold mb-6 tracking-tight">
+          Content Revealed.
+        </h1>
+        <p className="text-xl text-zinc-500 max-w-lg mx-auto mb-8">
+          The loading screen has successfully animated upwards, revealing the main application content behind it.
+        </p>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="px-6 py-3 bg-black text-white rounded-full font-medium hover:bg-zinc-800 transition-colors"
+        >
+          Replay Animation
+        </button>
+      </div>
+
+    </div>
+  );
+}
