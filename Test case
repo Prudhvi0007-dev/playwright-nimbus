@@ -1,0 +1,708 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { 
+  Plus, 
+  X, 
+  ChevronDown, 
+  Save, 
+  ArrowLeft, 
+  ChevronRight,
+  Trash2,
+  Check,
+  Search,
+  AlertCircle,
+  Database,
+  Settings,
+  ListStart,
+  ListEnd,
+  FileText,
+  Code,
+  Copy,
+  LayoutTemplate
+} from 'lucide-react';
+
+// --- MOCK DATA FOR CLONING ---
+const MOCK_EXISTING_CASES = [
+  {
+    id: 101,
+    title: "Verify Invoice Generation for EMEA",
+    description: "Ensure system generates valid PDF invoices for cross-border transactions in EMEA region.",
+    application: "iReceivables",
+    module: "Billing",
+    priority: "Critical",
+    status: "Approved",
+    owner: "QA Lead",
+    bu: "EMEA",
+    ou: "Finance",
+    automation: "Automated",
+    setupType: "lookup",
+    setupText: "",
+    lookups: [
+      { id: 1, reason: "Region Code", code: "LKP_REG_01", value: "EMEA_UK" },
+      { id: 2, reason: "Tax Rule", code: "TAX_VAT_STD", value: "20%" }
+    ],
+    preConditions: "1. Customer account exists with active status.\n2. Billing cycle is open.",
+    postConditions: "Invoice ID generated in DB table AR_INVOICES.",
+    steps: [
+      { id: 1, action: "Navigate to Billing Dashboard", expected: "Dashboard loads with EMEA view", data: "User: finance_admin", query: "" },
+      { id: 2, action: "Click 'Generate Invoice'", expected: "Form opens", data: "", query: "" }
+    ]
+  },
+  {
+    id: 102,
+    title: "Validate API Token Expiry",
+    description: "Check if the authentication token expires after 30 minutes of inactivity.",
+    application: "General Ledger",
+    module: "Security",
+    priority: "High",
+    status: "Approved",
+    owner: "Dev Team",
+    bu: "Global",
+    ou: "Operations",
+    automation: "Automated",
+    setupType: "text",
+    setupText: "Run script: ./auth_timeout_sim.sh --duration 30m",
+    lookups: [],
+    preConditions: "User logged in via API.",
+    postConditions: "401 Unauthorized response received.",
+    steps: [
+      { id: 1, action: "Call /api/health endpoint", expected: "200 OK", data: "Bearer Token", query: "" },
+      { id: 2, action: "Wait 31 minutes", expected: "System invalidates session", data: "", query: "SELECT * FROM sessions WHERE user_id = ?" }
+    ]
+  },
+  {
+    id: 103,
+    title: "Manual Payment Processing - US West",
+    description: "Verify manual entry of check payments for legacy accounts.",
+    application: "Payables",
+    module: "Payments",
+    priority: "Medium",
+    status: "In Review",
+    owner: "Me",
+    bu: "US West",
+    ou: "Finance",
+    automation: "Manual",
+    setupType: "lookup",
+    setupText: "",
+    lookups: [
+      { id: 1, reason: "Payment Method", code: "PMT_TYPE", value: "CHECK_MANUAL" }
+    ],
+    preConditions: "Pending invoice exists.",
+    postConditions: "Payment record linked to invoice.",
+    steps: [
+      { id: 1, action: "Open Payment Module", expected: "List of pending invoices shown", data: "", query: "" }
+    ]
+  }
+];
+
+// --- COMPONENTS ---
+
+// 1. ZEN COMBOBOX (Minimal Pill + Search/Add)
+const ZenCombobox = ({ icon: Icon, label, value, options = [], onChange, allowAdd = true }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const dropdownRef = useRef(null);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsOpen(false);
+        setSearch(""); 
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen && inputRef.current) inputRef.current.focus();
+  }, [isOpen]);
+
+  const filteredOptions = options.filter(opt => 
+    opt.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleSelect = (opt) => {
+    onChange(opt);
+    setIsOpen(false);
+    setSearch("");
+  };
+
+  const handleAddNew = () => {
+    if (allowAdd && search) {
+      onChange(search);
+      setIsOpen(false);
+      setSearch("");
+    }
+  };
+
+  return (
+    <div className="relative inline-block mr-3 mb-3" ref={dropdownRef}>
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className={`
+          flex items-center gap-2 px-4 py-2 rounded-lg border text-sm transition-all shadow-sm
+          ${value 
+            ? 'bg-white border-slate-300 text-slate-900 hover:border-slate-400' 
+            : 'bg-white border-dashed border-slate-300 text-slate-500 hover:text-slate-700 hover:border-slate-400'
+          }
+        `}
+      >
+        {Icon && <Icon size={14} className="text-slate-500" />}
+        <span className="text-slate-900 font-bold uppercase text-xs tracking-wide">{label}:</span>
+        <span className={`font-medium max-w-[150px] truncate ${value ? 'text-slate-800' : 'text-slate-400 italic'}`}>
+          {value || "Select..."}
+        </span>
+        <ChevronDown size={12} className="opacity-50" />
+      </button>
+
+      {isOpen && (
+        <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+          <div className="p-2 border-b border-slate-100 bg-slate-50/50">
+            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-300 transition-all">
+              <Search size={14} className="text-slate-400" />
+              <input 
+                ref={inputRef}
+                className="w-full text-sm outline-none text-slate-700 placeholder-slate-400"
+                placeholder={`Find or add ${label}...`}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleAddNew();
+                }}
+              />
+            </div>
+          </div>
+          <div className="max-h-56 overflow-y-auto p-1 custom-scrollbar">
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((opt) => (
+                <button 
+                  key={opt}
+                  onClick={() => handleSelect(opt)}
+                  className={`
+                    w-full text-left px-3 py-2 text-sm rounded-lg flex items-center justify-between group transition-colors
+                    ${value === opt ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
+                  `}
+                >
+                  {opt}
+                  {value === opt && <Check size={14} />}
+                </button>
+              ))
+            ) : (
+              <div className="p-2">
+                {allowAdd && search ? (
+                  <button 
+                    onClick={handleAddNew}
+                    className="w-full text-left px-3 py-2 text-sm text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                  >
+                    <span className="font-semibold">+ Create</span> "{search}"
+                  </button>
+                ) : (
+                  <div className="text-center py-4 text-xs text-slate-400">No matching options</div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// 2. AUTO-GROWING TEXT AREA
+const AutoTextArea = ({ value, onChange, placeholder, className, minRows = 1 }) => {
+  const textareaRef = useRef(null);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
+    }
+  }, [value]);
+
+  return (
+    <textarea
+      ref={textareaRef}
+      rows={minRows}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      className={`w-full resize-none outline-none bg-transparent ${className}`}
+    />
+  );
+};
+
+// --- MAIN APP ---
+export default function TestCaseCreatorV3() {
+  const [showProperties, setShowProperties] = useState(true);
+  const [showCloneModal, setShowCloneModal] = useState(false);
+  const [cloneSearch, setCloneSearch] = useState('');
+
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    preConditions: '',
+    postConditions: '',
+    setupType: 'text', 
+    setupText: '',
+    lookups: [{ id: 1, reason: '', code: '', value: '' }], 
+    status: 'Draft',
+    priority: '',
+    owner: '',
+    application: '',
+    module: '',
+    bu: '',
+    ou: '',
+    automation: '',
+    steps: [{ id: 1, action: '', expected: '', data: '', query: '' }]
+  });
+
+  const lists = {
+    status: ['Draft', 'In Review', 'Approved', 'Deprecated'],
+    priority: ['Critical', 'High', 'Medium', 'Low'],
+    owner: ['Me', 'QA Lead', 'Dev Team'],
+    application: ['iReceivables', 'General Ledger', 'Payables'],
+    module: ['Billing', 'Collections', 'Receipts'],
+    bu: ['US West', 'US East', 'EMEA'],
+    ou: ['Operations', 'Finance'],
+    automation: ['Manual', 'Automated']
+  };
+
+  const handleStepChange = (id, field, value) => {
+    const newSteps = formData.steps.map(step => 
+      step.id === id ? { ...step, [field]: value } : step
+    );
+    setFormData({ ...formData, steps: newSteps });
+  };
+
+  const addStep = () => {
+    setFormData({ 
+      ...formData, 
+      steps: [...formData.steps, { id: Date.now(), action: '', expected: '', data: '', query: '' }] 
+    });
+  };
+
+  const deleteStep = (id) => {
+    setFormData({ ...formData, steps: formData.steps.filter(s => s.id !== id) });
+  };
+
+  // Setup Instruction Handlers
+  const handleLookupChange = (id, field, value) => {
+    const newLookups = formData.lookups.map(lookup => 
+      lookup.id === id ? { ...lookup, [field]: value } : lookup
+    );
+    setFormData({ ...formData, lookups: newLookups });
+  };
+
+  const addLookup = () => {
+    setFormData({ 
+      ...formData, 
+      lookups: [...formData.lookups, { id: Date.now(), reason: '', code: '', value: '' }] 
+    });
+  };
+
+  const removeLookup = (id) => {
+    setFormData({ ...formData, lookups: formData.lookups.filter(l => l.id !== id) });
+  };
+
+  // CLONE HANDLER
+  const handleClone = (caseToClone) => {
+    // Create deep copy to avoid reference issues
+    const cloned = JSON.parse(JSON.stringify(caseToClone));
+    
+    // Regenerate IDs for arrays
+    const newLookups = cloned.lookups.map((l, i) => ({ ...l, id: Date.now() + i }));
+    const newSteps = cloned.steps.map((s, i) => ({ ...s, id: Date.now() + i + 100 }));
+
+    setFormData({
+      ...cloned,
+      title: `Copy of ${cloned.title}`, // Optional: Prefix title
+      status: 'Draft', // Reset status
+      lookups: newLookups,
+      steps: newSteps
+    });
+    
+    setShowCloneModal(false);
+  };
+
+  const filteredCases = MOCK_EXISTING_CASES.filter(c => 
+    c.title.toLowerCase().includes(cloneSearch.toLowerCase()) ||
+    c.application.toLowerCase().includes(cloneSearch.toLowerCase())
+  );
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-20">
+      
+      {/* 1. HEADER */}
+      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-sm border-b border-slate-200 px-6 h-16 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-4">
+          <button className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-500">
+            <ArrowLeft size={20} />
+          </button>
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <span className="hover:text-slate-900 cursor-pointer">Library</span>
+            <ChevronRight size={14} />
+            <span className="text-slate-900 font-bold bg-slate-100 px-2 py-1 rounded">New Case</span>
+          </div>
+        </div>
+        <div className="flex gap-3">
+          <button 
+            onClick={() => setShowCloneModal(true)}
+            className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2 border border-transparent hover:border-blue-100"
+          >
+            <Copy size={16} /> Clone Existing
+          </button>
+          <div className="h-8 w-px bg-slate-200 my-auto mx-1"></div>
+          <button className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors">
+            Discard
+          </button>
+          <button className="px-5 py-2 text-sm font-bold bg-slate-900 text-white hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-2 shadow-md hover:shadow-lg">
+            <Save size={16} /> Save Case
+          </button>
+        </div>
+      </header>
+
+      {/* 2. MAIN DOCUMENT */}
+      <main className="max-w-5xl mx-auto px-8 py-12 bg-white min-h-[calc(100vh-4rem)] shadow-sm border-x border-slate-200">
+        
+        {/* TITLE */}
+        <div className="mb-10">
+          <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Test Case Title</label>
+          <AutoTextArea 
+            value={formData.title}
+            onChange={(e) => setFormData({...formData, title: e.target.value})}
+            placeholder="e.g. Verify Login with Valid Credentials"
+            className="text-4xl font-bold placeholder-slate-300 text-slate-900 leading-tight"
+          />
+        </div>
+
+        {/* METADATA TOGGLE */}
+        <div className="mb-12 bg-slate-50 p-6 rounded-2xl border border-slate-100">
+          <button 
+            onClick={() => setShowProperties(!showProperties)}
+            className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-widest hover:text-slate-800 mb-4 transition-colors"
+          >
+            {showProperties ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            Configuration Properties
+          </button>
+
+          {showProperties && (
+            <div className="flex flex-wrap items-center animate-in slide-in-from-top-2 fade-in duration-200">
+              <ZenCombobox label="Application" value={formData.application} options={lists.application} onChange={(v) => setFormData({...formData, application: v})} />
+              <ZenCombobox label="Module" value={formData.module} options={lists.module} onChange={(v) => setFormData({...formData, module: v})} />
+              <ZenCombobox label="Status" value={formData.status} options={lists.status} onChange={(v) => setFormData({...formData, status: v})} />
+              <ZenCombobox label="Priority" value={formData.priority} options={lists.priority} onChange={(v) => setFormData({...formData, priority: v})} />
+              <ZenCombobox label="Owner" value={formData.owner} options={lists.owner} onChange={(v) => setFormData({...formData, owner: v})} />
+              <ZenCombobox label="BU" value={formData.bu} options={lists.bu} onChange={(v) => setFormData({...formData, bu: v})} />
+              <ZenCombobox label="OU" value={formData.ou} options={lists.ou} onChange={(v) => setFormData({...formData, ou: v})} />
+              <ZenCombobox label="Automation" value={formData.automation} options={lists.automation} onChange={(v) => setFormData({...formData, automation: v})} />
+            </div>
+          )}
+        </div>
+
+        {/* 3. TEST DETAILS SECTION */}
+        <div className="mb-16 space-y-10">
+          
+          {/* Description */}
+          <div>
+            <label className="flex items-center gap-2 text-xs font-bold text-slate-900 uppercase tracking-widest mb-3 border-b border-slate-100 pb-2">
+              <FileText size={16} className="text-slate-400"/> Description / Objective
+            </label>
+            <AutoTextArea 
+              minRows={2}
+              placeholder="High-level summary of the test scenario..."
+              value={formData.description}
+              onChange={(e) => setFormData({...formData, description: e.target.value})}
+              className="text-lg text-slate-700 placeholder-slate-300 leading-relaxed pl-1"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+            {/* Pre-Conditions */}
+            <div>
+               <label className="flex items-center gap-2 text-xs font-bold text-slate-900 uppercase tracking-widest mb-3 border-b border-slate-100 pb-2">
+                 <ListStart size={16} className="text-blue-400"/> Pre-Conditions
+               </label>
+               <AutoTextArea 
+                 minRows={3}
+                 placeholder="1. User is logged in&#10;2. Database is clean"
+                 value={formData.preConditions}
+                 onChange={(e) => setFormData({...formData, preConditions: e.target.value})}
+                 className="text-sm text-slate-600 placeholder-slate-300 leading-relaxed font-mono bg-slate-50/50 p-3 rounded-lg border border-transparent focus:border-slate-200 transition-all"
+               />
+            </div>
+            {/* Post-Conditions */}
+            <div>
+               <label className="flex items-center gap-2 text-xs font-bold text-slate-900 uppercase tracking-widest mb-3 border-b border-slate-100 pb-2">
+                 <ListEnd size={16} className="text-emerald-400"/> Post-Conditions
+               </label>
+               <AutoTextArea 
+                 minRows={3}
+                 placeholder="1. Record ID returned&#10;2. Email sent"
+                 value={formData.postConditions}
+                 onChange={(e) => setFormData({...formData, postConditions: e.target.value})}
+                 className="text-sm text-slate-600 placeholder-slate-300 leading-relaxed font-mono bg-slate-50/50 p-3 rounded-lg border border-transparent focus:border-slate-200 transition-all"
+               />
+            </div>
+          </div>
+
+          <div>
+             {/* Setup Instructions - DUAL MODE (TEXT & LOOKUP) */}
+             <div>
+                <div className="flex items-center justify-between mb-6 border-b border-slate-100 pb-2">
+                  <label className="flex items-center gap-2 text-xs font-bold text-slate-900 uppercase tracking-widest">
+                    <Settings size={16} className="text-amber-400"/> Setup & Configuration
+                  </label>
+                </div>
+
+                <div className="space-y-8">
+                  
+                  {/* 1. Free Text Instructions */}
+                  <div>
+                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase mb-2 ml-1">Setup Instructions</label>
+                    <AutoTextArea 
+                      minRows={2}
+                      placeholder="Run script setup_env.sh or specific environment configurations..."
+                      value={formData.setupText}
+                      onChange={(e) => setFormData({...formData, setupText: e.target.value})}
+                      className="text-sm text-slate-600 placeholder-slate-300 leading-relaxed pl-1"
+                    />
+                  </div>
+
+                  {/* 2. Lookups / Data Setup */}
+                  <div>
+                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase mb-3 ml-1">Required Lookups</label>
+                    <div className="space-y-3">
+                      {formData.lookups.map((lookup, idx) => (
+                        <div key={lookup.id} className="grid grid-cols-1 md:grid-cols-7 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 relative group transition-all hover:shadow-sm hover:border-blue-200">
+                          
+                          <div className="md:col-span-3">
+                            <label className="block text-[10px] font-extrabold text-slate-700 uppercase mb-2">Reason</label>
+                            <input 
+                              className="w-full text-sm text-slate-800 bg-white border border-slate-200 rounded px-2 py-1.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none placeholder-slate-300"
+                              placeholder="Why is this required?"
+                              value={lookup.reason}
+                              onChange={(e) => handleLookupChange(lookup.id, 'reason', e.target.value)}
+                            />
+                          </div>
+
+                          <div className="md:col-span-2">
+                            <label className="block text-[10px] font-extrabold text-slate-700 uppercase mb-2">Lookup Code</label>
+                            <input 
+                              className="w-full text-sm text-slate-800 bg-white border border-slate-200 rounded px-2 py-1.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none placeholder-slate-300 font-mono"
+                              placeholder="e.g. LKP_USER_TYPE"
+                              value={lookup.code}
+                              onChange={(e) => handleLookupChange(lookup.id, 'code', e.target.value)}
+                            />
+                          </div>
+
+                          <div className="md:col-span-2">
+                            <label className="block text-[10px] font-extrabold text-slate-700 uppercase mb-2">Value</label>
+                            <input 
+                              className="w-full text-sm text-slate-800 bg-white border border-slate-200 rounded px-2 py-1.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none placeholder-slate-300 font-mono"
+                              placeholder="e.g. ADMIN_01"
+                              value={lookup.value}
+                              onChange={(e) => handleLookupChange(lookup.id, 'value', e.target.value)}
+                            />
+                          </div>
+
+                          {/* Delete Lookup Button */}
+                          <button 
+                            onClick={() => removeLookup(lookup.id)}
+                            className="absolute -top-2 -right-2 p-1 bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-200 rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-all"
+                            title="Remove Lookup"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+
+                      <button 
+                        onClick={addLookup}
+                        className="mt-2 text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors w-fit border border-blue-100"
+                      >
+                        <Plus size={14} /> Add Lookup Row
+                      </button>
+                    </div>
+                  </div>
+                </div>
+             </div>
+          </div>
+
+        </div>
+
+        {/* 4. TEST STEPS */}
+        <div>
+          <h3 className="text-sm font-black text-slate-900 border-b border-slate-200 pb-3 mb-8 uppercase tracking-widest flex items-center gap-2">
+            <ListStart size={18} className="text-slate-400"/> Test Script Execution
+          </h3>
+
+          <div className="space-y-12 relative">
+            <div className="absolute left-4 top-2 bottom-0 w-px bg-slate-200 -z-10 dashed-border"></div>
+
+            {formData.steps.map((step, index) => (
+              <div key={step.id} className="group relative pl-12 transition-all">
+                
+                {/* Step Bubble */}
+                <div className="absolute left-0 top-0 w-8 h-8 bg-white border-2 border-slate-200 rounded-full flex items-center justify-center text-sm font-bold text-slate-600 shadow-sm group-hover:border-blue-500 group-hover:text-blue-600 transition-colors z-10">
+                  {index + 1}
+                </div>
+
+                <div className="p-1 -ml-1 rounded-2xl hover:bg-slate-50/80 transition-colors duration-200 border border-transparent hover:border-slate-100">
+                  <div className="relative p-6">
+                    
+                    {/* Action */}
+                    <div className="mb-8">
+                      <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-2">
+                        Action Step
+                      </label>
+                      <AutoTextArea 
+                        minRows={2}
+                        placeholder="Describe the action to perform..."
+                        value={step.action}
+                        onChange={(e) => handleStepChange(step.id, 'action', e.target.value)}
+                        className="text-xl text-slate-800 placeholder-slate-300 leading-normal w-full"
+                      />
+                    </div>
+
+                    {/* Expected Result */}
+                    <div className="mb-8 pl-4 border-l-4 border-emerald-100">
+                      <label className="block text-xs font-black text-emerald-700 uppercase tracking-wider mb-2">
+                        Expected Outcome
+                      </label>
+                      <AutoTextArea 
+                        minRows={1}
+                        placeholder="What should the system do?"
+                        value={step.expected}
+                        onChange={(e) => handleStepChange(step.id, 'expected', e.target.value)}
+                        className="text-base text-slate-600 placeholder-slate-300 leading-relaxed w-full"
+                      />
+                    </div>
+
+                    {/* Footer Row: Data & Queries */}
+                    <div className="flex flex-col md:flex-row gap-8 pt-4 border-t border-slate-100/50">
+                      
+                      {/* Data Hint */}
+                      <div className="flex-1">
+                        <label className="block text-[10px] font-extrabold text-slate-500 uppercase mb-2">Test Data / Parameters</label>
+                        <input 
+                          className="w-full text-xs bg-slate-50 text-slate-600 placeholder-slate-400 border border-slate-200 rounded-md px-2 py-2 focus:border-slate-400 focus:outline-none transition-colors"
+                          placeholder="e.g. Login: user/pass"
+                          value={step.data}
+                          onChange={(e) => handleStepChange(step.id, 'data', e.target.value)}
+                        />
+                      </div>
+
+                      {/* Action Level Query */}
+                      <div className="flex-1">
+                        <label className="flex items-center gap-1 text-[10px] font-extrabold text-blue-600 uppercase mb-2">
+                          <Database size={12} /> SQL / Verification Query
+                        </label>
+                        <div className="relative">
+                          <input 
+                            className="w-full text-xs bg-blue-50/50 text-blue-700 placeholder-blue-300 border border-blue-100 rounded-md px-2 py-2 focus:border-blue-300 outline-none font-mono transition-colors"
+                            placeholder="SELECT * FROM table WHERE..."
+                            value={step.query}
+                            onChange={(e) => handleStepChange(step.id, 'query', e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* Delete */}
+                    <button 
+                      onClick={() => deleteStep(step.id)}
+                      className="absolute top-6 right-6 p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                      title="Delete Step"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button 
+            onClick={addStep}
+            className="group mt-12 ml-4 flex items-center gap-4 text-slate-400 hover:text-blue-600 transition-colors pl-8"
+          >
+            <div className="w-10 h-10 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center group-hover:border-blue-500 group-hover:bg-blue-50 transition-all">
+              <Plus size={20} />
+            </div>
+            <span className="font-bold text-sm uppercase tracking-wider">Add Next Step</span>
+          </button>
+
+        </div>
+
+      </main>
+
+      {/* CLONE MODAL */}
+      {showCloneModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden border border-slate-200">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Clone Test Case</h3>
+                <p className="text-sm text-slate-500 mt-1">Select a test case to copy configurations and steps.</p>
+              </div>
+              <button 
+                onClick={() => setShowCloneModal(false)}
+                className="p-2 hover:bg-slate-200 rounded-full text-slate-500 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-4 border-b border-slate-100">
+              <div className="relative">
+                <Search size={18} className="absolute left-3 top-3 text-slate-400" />
+                <input 
+                  autoFocus
+                  placeholder="Search by title or application..."
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all text-slate-700"
+                  value={cloneSearch}
+                  onChange={(e) => setCloneSearch(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="max-h-[400px] overflow-y-auto p-2 bg-slate-50/30 custom-scrollbar">
+              {filteredCases.length > 0 ? (
+                <div className="space-y-2">
+                  {filteredCases.map(tc => (
+                    <button
+                      key={tc.id}
+                      onClick={() => handleClone(tc)}
+                      className="w-full text-left p-4 rounded-xl border border-slate-200 bg-white hover:border-blue-300 hover:shadow-md transition-all group"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="font-bold text-slate-800 text-lg group-hover:text-blue-700 transition-colors line-clamp-1">{tc.title}</span>
+                        <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded bg-slate-100 text-slate-500`}>
+                          {tc.application}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-500 line-clamp-2 mb-3">{tc.description}</p>
+                      <div className="flex items-center gap-3 text-xs text-slate-400 font-medium">
+                        <span className="flex items-center gap-1"><LayoutTemplate size={12}/> {tc.module}</span>
+                        <span className="flex items-center gap-1"><ListStart size={12}/> {tc.steps.length} Steps</span>
+                        <span className="flex items-center gap-1"><Settings size={12}/> {tc.lookups.length} Lookups</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12 text-slate-400">
+                  No matching test cases found.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
