@@ -1,0 +1,333 @@
+import React, { useState } from 'react';
+import { 
+  ArrowLeft, 
+  Edit3, 
+  Share2, 
+  MoreHorizontal, 
+  CheckCircle2, 
+  Clock, 
+  Layout, 
+  Box, 
+  Globe, 
+  Briefcase, 
+  User, 
+  Database, 
+  FileText, 
+  PlayCircle,
+  Settings,
+  ArrowDown,
+  Terminal,
+  Server
+} from 'lucide-react';
+
+// --- MOCK DATA FOR VIEWING ---
+const TEST_CASE = {
+  id: "TC-2024-001",
+  title: "Verify Invoice Generation for EMEA Region",
+  description: "Ensure that the system correctly generates valid PDF invoices for cross-border transactions within the EMEA region, applying correct VAT rules and templates.",
+  status: "Approved",
+  priority: "Critical",
+  automation: "Automated",
+  application: "iReceivables",
+  module: "Billing",
+  bu: "EMEA",
+  ou: "Finance Dept",
+  owner: "Sarah Jenkins",
+  lastUpdated: "2 hours ago",
+  setup: {
+    type: "lookup",
+    text: "Ensure the environment variables are set for EMEA_PROD.",
+    lookups: [
+      { id: 1, reason: "Region Configuration", code: "LKP_REG_01", value: "EMEA_UK" },
+      { id: 2, reason: "Tax Rule Set", code: "TAX_VAT_STD", value: "20%" },
+      { id: 3, reason: "Currency Format", code: "CUR_FMT", value: "GBP" }
+    ]
+  },
+  preConditions: [
+    "User 'finance_admin' is logged in.",
+    "Customer account 'CUST_9988' exists and is active.",
+    "Billing cycle for the current month is open."
+  ],
+  postConditions: [
+    "Invoice record created in AR_INVOICES table.",
+    "PDF file generated in S3 bucket.",
+    "Email notification sent to customer."
+  ],
+  steps: [
+    { 
+      id: 1, 
+      action: "Navigate to the Billing Dashboard via the main menu.", 
+      expected: "Dashboard loads successfully showing the EMEA view filter.", 
+      data: "Menu > Billing > Dashboard", 
+      query: "" 
+    },
+    { 
+      id: 2, 
+      action: "Select the target customer and click 'Generate Invoice'.", 
+      expected: "Invoice Generation Modal appears with pre-filled customer details.", 
+      data: "Customer ID: CUST_9988", 
+      query: "SELECT status FROM customers WHERE id = 'CUST_9988'" 
+    },
+    { 
+      id: 3, 
+      action: "Enter invoice amount and submit the form.", 
+      expected: "Success message 'Invoice #INV-2024-001 Created' is displayed.", 
+      data: "Amount: 1500.00", 
+      query: "SELECT * FROM ar_invoices WHERE invoice_num = 'INV-2024-001'" 
+    }
+  ]
+};
+
+// --- COMPONENTS ---
+
+const StatusBadge = ({ status }) => {
+  const styles = {
+    Approved: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    Draft: "bg-slate-100 text-slate-700 border-slate-200",
+    "In Review": "bg-amber-100 text-amber-700 border-amber-200"
+  };
+  return (
+    <span className={`px-3 py-1 rounded-full text-xs font-bold border uppercase tracking-wide ${styles[status] || styles.Draft}`}>
+      {status}
+    </span>
+  );
+};
+
+const MetadataItem = ({ icon: Icon, label, value }) => (
+  <div className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 bg-slate-50/50">
+    <div className="p-2 bg-white rounded-md border border-slate-200 text-slate-500">
+      <Icon size={16} />
+    </div>
+    <div>
+      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</div>
+      <div className="text-sm font-semibold text-slate-800">{value}</div>
+    </div>
+  </div>
+);
+
+const FlowNode = ({ title, type, children, isLast }) => {
+  const borderColors = {
+    start: "border-blue-500 bg-blue-50",
+    step: "border-slate-300 bg-white",
+    end: "border-emerald-500 bg-emerald-50"
+  };
+
+  const iconColors = {
+    start: "bg-blue-500 text-white",
+    step: "bg-slate-900 text-white",
+    end: "bg-emerald-500 text-white"
+  };
+
+  return (
+    <div className="flex gap-6 relative">
+      {/* Timeline Line */}
+      {!isLast && (
+        <div className="absolute left-5 top-10 bottom-[-24px] w-0.5 bg-slate-200 z-0"></div>
+      )}
+
+      {/* Node Icon */}
+      <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 z-10 shadow-sm ${iconColors[type] || iconColors.step}`}>
+        {type === 'start' ? <PlayCircle size={20} /> : type === 'end' ? <CheckCircle2 size={20} /> : <div className="font-bold text-sm">{title}</div>}
+      </div>
+
+      {/* Card Content */}
+      <div className={`flex-1 mb-8 p-5 rounded-xl border shadow-sm ${borderColors[type] || borderColors.step}`}>
+        {children}
+      </div>
+    </div>
+  );
+};
+
+// --- MAIN SCREEN ---
+export default function TestCaseViewer() {
+  const data = TEST_CASE;
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
+      
+      {/* 1. HEADER */}
+      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 px-8 h-20 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-6">
+          <button className="p-2.5 hover:bg-slate-100 rounded-xl transition-colors text-slate-500">
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <span className="text-xs font-mono text-slate-400">{data.id}</span>
+              <StatusBadge status={data.status} />
+            </div>
+            <h1 className="text-xl font-bold text-slate-900 leading-tight">{data.title}</h1>
+          </div>
+        </div>
+        <div className="flex gap-3">
+          <button className="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg shadow-sm transition-colors flex items-center gap-2">
+            <Share2 size={16} /> Share
+          </button>
+          <button className="px-5 py-2 text-sm font-bold bg-slate-900 text-white hover:bg-slate-800 rounded-lg shadow-md transition-colors flex items-center gap-2">
+            <Edit3 size={16} /> Edit Case
+          </button>
+        </div>
+      </header>
+
+      <main className="max-w-[1600px] mx-auto px-8 py-10 grid grid-cols-12 gap-10">
+        
+        {/* LEFT COLUMN: CONTEXT & METADATA (4 cols) */}
+        <div className="col-span-12 lg:col-span-4 space-y-8">
+          
+          {/* Metadata Grid */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-6 flex items-center gap-2">
+              <Layout size={14} className="text-blue-500"/> Configuration
+            </h3>
+            <div className="grid grid-cols-1 gap-3">
+              <MetadataItem icon={Layout} label="Application" value={data.application} />
+              <MetadataItem icon={Box} label="Module" value={data.module} />
+              <MetadataItem icon={Briefcase} label="Business Unit" value={data.bu} />
+              <MetadataItem icon={Globe} label="Operating Unit" value={data.ou} />
+              <MetadataItem icon={User} label="Owner" value={data.owner} />
+              <MetadataItem icon={Clock} label="Last Updated" value={data.lastUpdated} />
+            </div>
+          </div>
+
+          {/* Description */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2">
+              <FileText size={14} className="text-slate-400"/> Description
+            </h3>
+            <p className="text-slate-600 text-sm leading-relaxed">
+              {data.description}
+            </p>
+          </div>
+
+          {/* Lookups Table */}
+          {data.setup.lookups.length > 0 && (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                  <Settings size={14} className="text-amber-500"/> Required Lookups
+                </h3>
+              </div>
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs text-slate-400 font-bold uppercase bg-slate-50 border-b border-slate-100">
+                  <tr>
+                    <th className="px-6 py-3">Reason</th>
+                    <th className="px-6 py-3">Code</th>
+                    <th className="px-6 py-3">Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.setup.lookups.map((lookup, idx) => (
+                    <tr key={lookup.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors">
+                      <td className="px-6 py-3 font-medium text-slate-700">{lookup.reason}</td>
+                      <td className="px-6 py-3 font-mono text-xs text-slate-500">{lookup.code}</td>
+                      <td className="px-6 py-3 font-mono text-xs text-blue-600 bg-blue-50/30">{lookup.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+        </div>
+
+        {/* RIGHT COLUMN: VISUAL FLOWCHART (8 cols) */}
+        <div className="col-span-12 lg:col-span-8">
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-xl font-bold text-slate-900">Execution Flow</h2>
+            <div className="text-xs font-medium text-slate-500 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-sm">
+              Visual Representation
+            </div>
+          </div>
+
+          {/* 1. START NODE (PRE-CONDITIONS) */}
+          <FlowNode title="Start" type="start">
+            <div className="flex justify-between items-start mb-3">
+              <h4 className="font-bold text-blue-900 text-sm uppercase tracking-wide">Pre-Conditions & Setup</h4>
+              <div className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-bold uppercase rounded">Entry Criteria</div>
+            </div>
+            
+            <ul className="space-y-2 mb-4">
+              {data.preConditions.map((cond, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
+                  <CheckCircle2 size={16} className="text-blue-400 shrink-0 mt-0.5" />
+                  <span>{cond}</span>
+                </li>
+              ))}
+            </ul>
+
+            {data.setup.text && (
+              <div className="mt-4 p-3 bg-white/60 border border-blue-100 rounded-lg text-xs font-mono text-blue-800 flex items-start gap-2">
+                <Terminal size={14} className="mt-0.5 shrink-0" />
+                {data.setup.text}
+              </div>
+            )}
+          </FlowNode>
+
+          {/* 2. STEP NODES */}
+          {data.steps.map((step, index) => (
+            <FlowNode key={step.id} title={index + 1} type="step">
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                
+                {/* Action Side */}
+                <div>
+                  <div className="text-[10px] font-extrabold text-slate-400 uppercase mb-2">Action</div>
+                  <p className="text-sm text-slate-800 font-medium leading-relaxed">
+                    {step.action}
+                  </p>
+                  
+                  {step.data && (
+                    <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-md border border-slate-200 text-xs text-slate-600">
+                      <Database size={12} /> 
+                      <span className="font-mono">{step.data}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Result Side */}
+                <div className="border-l-2 border-emerald-100 pl-6 relative">
+                  {/* Small arrow indicator */}
+                  <div className="absolute -left-[5px] top-0 w-2 h-2 bg-emerald-400 rounded-full"></div>
+                  
+                  <div className="text-[10px] font-extrabold text-emerald-600 uppercase mb-2">Expected Result</div>
+                  <p className="text-sm text-slate-600 leading-relaxed mb-3">
+                    {step.expected}
+                  </p>
+
+                  {step.query && (
+                    <div className="p-3 bg-slate-900 rounded-lg text-xs font-mono text-emerald-400 border border-slate-700 relative group cursor-pointer hover:bg-slate-800 transition-colors">
+                      <div className="absolute top-2 right-2 text-slate-500 opacity-50 group-hover:opacity-100">
+                        <Server size={12} />
+                      </div>
+                      <span className="text-slate-500 mr-2">$</span>
+                      {step.query}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            </FlowNode>
+          ))}
+
+          {/* 3. END NODE (POST-CONDITIONS) */}
+          <FlowNode title="End" type="end" isLast={true}>
+            <div className="flex justify-between items-start mb-3">
+              <h4 className="font-bold text-emerald-900 text-sm uppercase tracking-wide">Post-Conditions</h4>
+              <div className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase rounded">Exit Criteria</div>
+            </div>
+            <ul className="space-y-2">
+              {data.postConditions.map((cond, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
+                  <CheckCircle2 size={16} className="text-emerald-500 shrink-0 mt-0.5" />
+                  <span>{cond}</span>
+                </li>
+              ))}
+            </ul>
+          </FlowNode>
+
+        </div>
+
+      </main>
+    </div>
+  );
+}
