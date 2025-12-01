@@ -1,0 +1,271 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  Zap, 
+  Activity, 
+  Bug, 
+  GitPullRequest, 
+  CheckCircle2, 
+  Search, 
+  Filter, 
+  ArrowUpRight, 
+  MoreHorizontal, 
+  Hexagon, 
+  Cpu, 
+  Layers,
+  AlertTriangle,
+  Clock // Added missing import
+} from 'lucide-react';
+
+// --- MOCK DATA ---
+const SYSTEM_STATUS = {
+  health: 82, // % Health
+  status: "STABLE", // or CRITICAL, UNSTABLE
+  uptime: "99.98%"
+};
+
+const METRICS = [
+  { id: 1, label: "Critical Anomalies", value: 5, trend: "+2", color: "text-rose-500", icon: Zap, bg: "bg-rose-500/10" },
+  { id: 2, label: "Active Bugs", value: 42, trend: "-5", color: "text-amber-400", icon: Bug, bg: "bg-amber-500/10" },
+  { id: 3, label: "In Resolution", value: 12, trend: "+8", color: "text-cyan-400", icon: GitPullRequest, bg: "bg-cyan-500/10" },
+  { id: 4, label: "Patch Verification", value: 8, trend: "0", color: "text-violet-400", icon: Layers, bg: "bg-violet-500/10" },
+];
+
+const DEFECTS = [
+  { id: 'ERR-2049', title: 'Payment Gateway Timeout', module: 'Checkout', severity: 'Critical', status: 'In Progress', assignee: 'Alex M.', age: '2h' },
+  { id: 'ERR-2055', title: 'Auth Token Leakage', module: 'Security', severity: 'Critical', status: 'Open', assignee: 'Sarah J.', age: '4h' },
+  { id: 'BUG-3012', title: 'Mobile View Misalignment', module: 'Frontend', severity: 'Moderate', status: 'In Review', assignee: 'Mike R.', age: '1d' },
+  { id: 'BUG-3015', title: 'Export PDF formatting issue', module: 'Reporting', severity: 'Minor', status: 'Open', assignee: 'Unassigned', age: '2d' },
+  { id: 'BUG-3018', title: 'Search index latency', module: 'Core', severity: 'Moderate', status: 'In Progress', assignee: 'David C.', age: '3d' },
+];
+
+// --- COMPONENTS ---
+
+// 1. THE "LIVING CORE" (Central Visual)
+const SystemCore = ({ health }) => (
+  <div className="relative w-64 h-64 flex items-center justify-center">
+    {/* Outer Rings */}
+    <div className="absolute inset-0 rounded-full border border-white/5 animate-[spin_10s_linear_infinite]"></div>
+    <div className="absolute inset-4 rounded-full border border-white/5 animate-[spin_15s_linear_infinite_reverse]"></div>
+    
+    {/* Glowing Orb */}
+    <div className="relative z-10 w-32 h-32 rounded-full bg-black flex items-center justify-center shadow-[0_0_100px_rgba(59,130,246,0.2)]">
+      <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-blue-600/20 to-purple-600/20 animate-pulse"></div>
+      <div className="text-center">
+        <div className="text-4xl font-bold text-white tracking-tighter">{health}%</div>
+        <div className="text-[10px] uppercase tracking-[0.3em] text-blue-400 mt-1">Health</div>
+      </div>
+    </div>
+
+    {/* Orbiting Satellites */}
+    <div className="absolute top-0 w-full h-full animate-[spin_8s_linear_infinite]">
+      <div className="w-2 h-2 bg-blue-500 rounded-full absolute top-0 left-1/2 -translate-x-1/2 shadow-[0_0_15px_currentColor]"></div>
+    </div>
+    <div className="absolute top-0 w-full h-full animate-[spin_12s_linear_infinite_reverse]">
+      <div className="w-1.5 h-1.5 bg-purple-500 rounded-full absolute bottom-10 left-10 shadow-[0_0_15px_currentColor]"></div>
+    </div>
+  </div>
+);
+
+// 2. HOLOGRAPHIC METRIC CARD
+const HoloCard = ({ label, value, trend, icon: Icon, color, bg }) => (
+  <div className="group relative bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-2xl overflow-hidden hover:bg-white/10 transition-all duration-300">
+    <div className={`absolute top-0 right-0 p-20 ${bg} opacity-20 rounded-full blur-3xl -mr-10 -mt-10 transition-opacity group-hover:opacity-40`}></div>
+    
+    <div className="relative z-10">
+      <div className="flex justify-between items-start mb-4">
+        <div className={`p-2 rounded-lg ${bg} ${color} border border-white/5`}>
+          <Icon size={20} />
+        </div>
+        <span className="flex items-center text-xs font-medium text-zinc-400 bg-black/20 px-2 py-1 rounded-full">
+          {trend} this week
+        </span>
+      </div>
+      <div>
+        <div className="text-3xl font-bold text-white mb-1 tracking-tight">{value}</div>
+        <div className="text-xs text-zinc-500 uppercase tracking-widest font-medium">{label}</div>
+      </div>
+    </div>
+  </div>
+);
+
+// 3. DEFECT ROW (Futuristic List Item)
+const DefectRow = ({ defect }) => {
+  const isCritical = defect.severity === 'Critical';
+  
+  return (
+    <div className="group relative flex items-center gap-6 p-5 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/10 transition-all mb-3 overflow-hidden">
+      
+      {/* Severity Indicator Bar */}
+      <div className={`absolute left-0 top-0 bottom-0 w-1 ${isCritical ? 'bg-rose-500 shadow-[0_0_10px_#f43f5e]' : defect.severity === 'Moderate' ? 'bg-amber-500' : 'bg-blue-500'}`}></div>
+
+      {/* ID & Type */}
+      <div className="flex flex-col w-24 shrink-0">
+        <span className="font-mono text-xs text-zinc-500">{defect.id}</span>
+        <span className={`text-[10px] uppercase font-bold tracking-wider mt-1 ${isCritical ? 'text-rose-400' : 'text-zinc-400'}`}>
+          {defect.severity}
+        </span>
+      </div>
+
+      {/* Title & Meta */}
+      <div className="flex-1 min-w-0">
+        <h3 className="text-sm font-medium text-zinc-200 truncate group-hover:text-white transition-colors">
+          {defect.title}
+        </h3>
+        <div className="flex items-center gap-3 mt-1.5 text-xs text-zinc-500">
+          <span className="flex items-center gap-1"><Layers size={10}/> {defect.module}</span>
+          <span className="w-1 h-1 rounded-full bg-zinc-700"></span>
+          <span className="flex items-center gap-1"><Clock size={10}/> {defect.age}</span>
+        </div>
+      </div>
+
+      {/* Assignee */}
+      <div className="hidden md:flex items-center gap-3 px-4 border-l border-white/5">
+        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-zinc-700 to-zinc-900 border border-white/10 flex items-center justify-center text-[10px] text-zinc-300">
+          {defect.assignee.charAt(0)}
+        </div>
+        <span className="text-xs text-zinc-400">{defect.assignee}</span>
+      </div>
+
+      {/* Status Pill */}
+      <div className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border ${
+        defect.status === 'Open' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+        defect.status === 'In Progress' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+        'bg-zinc-800 text-zinc-400 border-zinc-700'
+      }`}>
+        {defect.status}
+      </div>
+
+      {/* Action */}
+      <button className="p-2 rounded-lg text-zinc-500 hover:text-white hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100">
+        <MoreHorizontal size={16} />
+      </button>
+    </div>
+  );
+};
+
+// --- MAIN PAGE ---
+export default function ArtisticDefectTracker() {
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 20);
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-[#050505] text-zinc-100 font-sans selection:bg-blue-500/30 overflow-x-hidden">
+      
+      {/* Background Ambient Effects */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-900/10 rounded-full blur-[150px]"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-900/10 rounded-full blur-[150px]"></div>
+        {/* Grid Overlay */}
+        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay"></div>
+        <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
+      </div>
+
+      {/* NAVBAR */}
+      <nav className={`fixed top-0 w-full z-50 px-8 py-4 transition-all duration-300 ${scrolled ? 'bg-black/80 backdrop-blur-xl border-b border-white/5' : 'bg-transparent'}`}>
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <Hexagon className="text-blue-500 animate-pulse" size={24} />
+            <span className="font-bold text-lg tracking-tight">VORTEX<span className="text-zinc-600">.QA</span></span>
+          </div>
+          <div className="flex items-center gap-6">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+              <input placeholder="Search anomalies..." className="bg-white/5 border border-white/10 rounded-full py-1.5 pl-9 pr-4 text-xs text-white focus:outline-none focus:border-blue-500/50 transition-colors w-48" />
+            </div>
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 p-[1px]">
+              <div className="w-full h-full rounded-full bg-black flex items-center justify-center text-xs font-bold">JD</div>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      {/* MAIN CONTENT */}
+      <main className="relative z-10 pt-32 pb-20 px-6">
+        <div className="max-w-7xl mx-auto">
+          
+          {/* HERO SECTION: The System Core */}
+          <div className="flex flex-col md:flex-row items-center gap-12 mb-24">
+            {/* Left: Text Info */}
+            <div className="flex-1">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase tracking-widest mb-6">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
+                System Status: Nominal
+              </div>
+              <h1 className="text-6xl md:text-7xl font-bold tracking-tighter mb-6 bg-clip-text text-transparent bg-gradient-to-r from-white via-white to-zinc-500">
+                DEFECT<br/>INTELLIGENCE
+              </h1>
+              <p className="text-zinc-400 text-lg max-w-md leading-relaxed">
+                Real-time anomaly detection and resolution tracking for the iReceivables ecosystem.
+              </p>
+            </div>
+
+            {/* Center: The Core Visualization */}
+            <div className="flex-shrink-0">
+              <SystemCore health={SYSTEM_STATUS.health} />
+            </div>
+
+            {/* Right: Quick Stats */}
+            <div className="flex-1 flex flex-col items-end gap-6">
+               <div className="text-right">
+                 <div className="text-3xl font-mono text-white">42</div>
+                 <div className="text-xs text-zinc-500 uppercase tracking-widest">Active Tickets</div>
+               </div>
+               <div className="text-right">
+                 <div className="text-3xl font-mono text-white">99.9%</div>
+                 <div className="text-xs text-zinc-500 uppercase tracking-widest">Uptime</div>
+               </div>
+               <div className="text-right">
+                 <div className="text-3xl font-mono text-white">2.4h</div>
+                 <div className="text-xs text-zinc-500 uppercase tracking-widest">Avg Fix Time</div>
+               </div>
+            </div>
+          </div>
+
+          {/* METRICS GRID */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-20">
+            {METRICS.map((metric) => (
+              <HoloCard key={metric.id} {...metric} />
+            ))}
+          </div>
+
+          {/* DEFECTS STREAM */}
+          <div>
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-2xl font-bold flex items-center gap-3">
+                <Activity size={24} className="text-blue-500" />
+                Anomaly Stream
+              </h2>
+              <div className="flex gap-2">
+                <button className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors flex items-center gap-2">
+                  <Filter size={12} /> Filter
+                </button>
+                <button className="px-4 py-2 bg-white text-black rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-zinc-200 transition-colors flex items-center gap-2">
+                  <ArrowUpRight size={12} /> Export Report
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {DEFECTS.map((defect) => (
+                <DefectRow key={defect.id} defect={defect} />
+              ))}
+            </div>
+            
+            <div className="mt-8 text-center">
+              <button className="text-zinc-500 hover:text-white text-xs uppercase tracking-widest transition-colors border-b border-zinc-800 pb-1 hover:border-white">
+                Load Historical Data
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </main>
+
+    </div>
+  );
+}
