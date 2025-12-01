@@ -1,0 +1,187 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { ArrowRight, Menu } from 'lucide-react';
+
+// --- COMPONENTS ---
+
+const Navbar = () => (
+  <nav className="fixed top-0 w-full z-50 px-8 py-6 flex justify-between items-center mix-blend-difference text-white">
+    <div className="flex items-center gap-2">
+      <div className="w-6 h-6 bg-white text-black flex items-center justify-center font-bold text-xs rounded-sm">Q</div>
+      <span className="font-mono text-xs tracking-[0.2em]">QUALITY.AI</span>
+    </div>
+    
+    <div className="hidden md:flex items-center gap-8 text-[10px] font-mono tracking-widest uppercase">
+      <a href="#" className="hover:text-zinc-400 transition-colors">Overview</a>
+      <a href="#" className="text-white">Metrics</a>
+      <a href="#" className="hover:text-zinc-400 transition-colors">Coverage</a>
+      <a href="#" className="hover:text-zinc-400 transition-colors">Defects</a>
+    </div>
+
+    <button className="px-6 py-2 bg-white text-black text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-200 transition-colors">
+      Export Report
+    </button>
+  </nav>
+);
+
+const SidebarItem = ({ number, title, subtext, isActive }) => (
+  <div className={`transition-all duration-500 border-l-2 pl-6 py-2 ${isActive ? 'border-white opacity-100' : 'border-zinc-800 opacity-30'}`}>
+    <div className="font-mono text-xs mb-2 tracking-widest">
+      <span className="text-white">0{number}</span> <span className="text-zinc-500">/</span> {title}
+    </div>
+    <p className="text-zinc-400 text-xs max-w-[200px] leading-relaxed">
+      {subtext}
+    </p>
+  </div>
+);
+
+const ContentCard = ({ number, title, description, features, color, stat }) => (
+  <div className="min-h-screen flex items-center p-12 md:p-24 border-b border-zinc-900 last:border-none">
+    <div className="max-w-xl">
+      <div className="font-mono text-9xl font-bold text-zinc-800/20 mb-8 select-none pointer-events-none">
+        0{number}
+      </div>
+      
+      {/* Hero Stat */}
+      <div className={`inline-block px-3 py-1 mb-6 rounded-full bg-zinc-900 border border-zinc-800 font-mono text-xs ${color.replace('bg-', 'text-')}`}>
+        {stat}
+      </div>
+
+      <h2 className="text-4xl md:text-5xl font-bold text-white mb-8 leading-tight">
+        {title}
+      </h2>
+      <p className="text-lg text-zinc-400 leading-relaxed mb-12">
+        {description}
+      </p>
+      
+      <div className="space-y-4">
+        {features.map((feature, i) => (
+          <div key={i} className="flex items-center gap-4 group">
+            <div className={`w-2 h-2 rounded-full ${color} shadow-[0_0_10px_currentColor] group-hover:scale-125 transition-transform`}></div>
+            <span className="text-sm font-mono text-zinc-300 uppercase tracking-wider">{feature}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+// --- MAIN PAGE ---
+
+export default function QAMetricsPage() {
+  const [activeStep, setActiveStep] = useState(1);
+  const scrollRef = useRef(null);
+
+  // Scroll Spy Logic
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY;
+      const windowHeight = window.innerHeight;
+      
+      if (scrollPosition < windowHeight * 0.8) {
+        setActiveStep(1);
+      } else if (scrollPosition < windowHeight * 1.8) {
+        setActiveStep(2);
+      } else {
+        setActiveStep(3);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  return (
+    <div className="bg-black min-h-screen text-white font-sans selection:bg-white selection:text-black">
+      <Navbar />
+
+      <main className="flex flex-col md:flex-row relative">
+        
+        {/* LEFT COLUMN: STICKY NAVIGATION */}
+        <div className="w-full md:w-1/2 h-[30vh] md:h-screen sticky top-0 bg-black z-10 flex flex-col justify-center px-12 md:px-24 border-r border-zinc-900">
+          <div className="mb-16">
+            <h1 className="text-5xl md:text-7xl font-bold leading-none mb-4">
+              QA<br/>INSIGHTS
+            </h1>
+          </div>
+          
+          <div className="space-y-12">
+            <SidebarItem 
+              number="1" 
+              title="REGRESSION DELTA" 
+              subtext="Comparative analysis of the last suite execution."
+              isActive={activeStep === 1}
+            />
+            <SidebarItem 
+              number="2" 
+              title="DEFECT VELOCITY" 
+              subtext="Severity trends compared to previous month."
+              isActive={activeStep === 2}
+            />
+            <SidebarItem 
+              number="3" 
+              title="AUTOMATION ROI" 
+              subtext="Manual effort reduction & efficiency gains."
+              isActive={activeStep === 3}
+            />
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN: SCROLLING CONTENT */}
+        <div className="w-full md:w-1/2 bg-zinc-950/50" ref={scrollRef}>
+          
+          {/* STEP 01 */}
+          <ContentCard 
+            number="1"
+            title="Regression Suite Comparison"
+            stat="Pass Rate: 98.5% (▲ 2.1%)"
+            description="Comparing the latest regression cycle against the baseline. We achieved a higher stability score with zero critical blockers found in the core checkout flow."
+            features={[
+              "Pass/Fail Variance Analysis",
+              "Execution Time: -15 mins",
+              "Flaky Test Reduction: 40%"
+            ]}
+            color="bg-emerald-500"
+          />
+
+          {/* STEP 02 */}
+          <ContentCard 
+            number="2"
+            title="Defect Severity Trends"
+            stat="Critical Defects: -35% MoM"
+            description="A month-over-month breakdown of defect density. Critical severity issues have dropped significantly due to improved unit test coverage in the pre-commit hooks."
+            features={[
+              "Sev-1 Reduction Strategy",
+              "Mean Time To Repair (MTTR)",
+              "Production Leakage: 0%"
+            ]}
+            color="bg-rose-500"
+          />
+
+          {/* STEP 03 */}
+          <ContentCard 
+            number="3"
+            title="Automation ROI & Efficiency"
+            stat="Manual Effort: -120 Hours"
+            description="Quantifying the impact of our new automation framework. We have successfully offloaded repetitive regression tasks, allowing QA engineers to focus on exploratory testing."
+            features={[
+              "Automation Coverage Gain: +15%",
+              "Script Maintenance Overhead",
+              "Execution Cost Savings"
+            ]}
+            color="bg-blue-500"
+          />
+
+          {/* NEXT SECTION TEASER */}
+          <div className="h-[50vh] flex items-center justify-center border-t border-zinc-900 bg-black">
+            <div className="text-center">
+              <div className="font-mono text-xs text-zinc-500 mb-4 uppercase tracking-widest">Deep Dive</div>
+              <h2 className="text-6xl font-bold">DETAILED REPORTS</h2>
+            </div>
+          </div>
+
+        </div>
+
+      </main>
+    </div>
+  );
+}
