@@ -1,0 +1,331 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Mic, Square, Loader2, X, CornerDownLeft, RotateCcw, Sparkles, Eraser } from 'lucide-react';
+
+// --- HOOK: USE SPEECH RECOGNITION ---
+const useSpeechToText = (options = {}) => {
+  const [isListening, setIsListening] = useState(false);
+  const [finalTranscript, setFinalTranscript] = useState("");
+  const [interimTranscript, setInterimTranscript] = useState("");
+  const recognitionRef = useRef(null);
+
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    if (!SpeechRecognition) {
+      console.error("Speech Recognition API is not supported in this browser.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = options.continuous ?? true;
+    recognition.interimResults = options.interimResults ?? true;
+    recognition.lang = options.lang || 'en-US';
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = (event) => {
+      console.error("Speech recognition error", event.error);
+      setIsListening(false);
+    };
+
+    recognition.onresult = (event) => {
+      let finals = "";
+      let interims = "";
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcriptSegment = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finals += transcriptSegment;
+        } else {
+          interims += transcriptSegment;
+        }
+      }
+      
+      if (finals) setFinalTranscript(finals);
+      setInterimTranscript(interims);
+    };
+
+    recognitionRef.current = recognition;
+
+    return () => {
+      if (recognitionRef.current) recognitionRef.current.stop();
+    };
+  }, []);
+
+  const startListening = () => {
+    if (recognitionRef.current && !isListening) {
+      try {
+        setFinalTranscript(""); 
+        recognitionRef.current.start();
+      } catch (error) {
+        console.error("Error starting recognition:", error);
+      }
+    }
+  };
+
+  const stopListening = () => {
+    if (recognitionRef.current && isListening) {
+      recognitionRef.current.stop();
+    }
+  };
+
+  return { 
+    isListening, 
+    finalTranscript, 
+    interimTranscript, 
+    startListening, 
+    stopListening, 
+    resetTranscript: () => setFinalTranscript("") 
+  };
+};
+
+// --- COMPONENT: SPEECH TEXT AREA ---
+const SpeechTextarea = ({ placeholder = "Jot down some thoughts..." }) => {
+  const [text, setText] = useState("");
+  const [history, setHistory] = useState([]); // Stores previous states for Undo
+  const [commandFeedback, setCommandFeedback] = useState(null); // Feedback msg
+  
+  const { 
+    isListening, 
+    finalTranscript, 
+    interimTranscript, 
+    startListening, 
+    stopListening, 
+    resetTranscript 
+  } = useSpeechToText({ continuous: true });
+  
+  // Helper: Map number words to digits
+  const wordToNum = {
+    one: 1, two: 2, three: 3, four: 4, five: 5, 
+    six: 6, seven: 7, eight: 8, nine: 9, ten: 10
+  };
+
+  // --- COMMAND LOGIC ---
+  useEffect(() => {
+    if (finalTranscript) {
+      const cleanText = finalTranscript.trim().toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g,"");
+      
+      // Regex for "delete last [N] words"
+      const deleteNPattern = /delete last (\w+|\d+) words?/;
+      const deleteNMatch = cleanText.match(deleteNPattern);
+
+      // 1. DETECT "DELETE LAST WORD" (Singular)
+      if (cleanText === 'delete last word') {
+        setHistory(prev => [...prev, text]); // Save state
+        setText(prev => {
+          const words = prev.trim().split(/\s+/);
+          return words.slice(0, -1).join(' ');
+        });
+        setCommandFeedback({ text: "Deleted last word", icon: Eraser });
+        setTimeout(() => setCommandFeedback(null), 2000);
+      }
+      // 2. DETECT "DELETE LAST [N] WORDS" (Plural)
+      else if (deleteNMatch) {
+         const qtyStr = deleteNMatch[1];
+         // Convert "three" -> 3 or "3" -> 3
+         const num = parseInt(qtyStr) || wordToNum[qtyStr] || 0;
+         
+         if (num > 0) {
+            setHistory(prev => [...prev, text]); // Save state
+            setText(prev => {
+              const words = prev.trim().split(/\s+/);
+              // Remove last N words
+              return words.slice(0, -num).join(' ');
+            });
+            setCommandFeedback({ text: `Deleted last ${num} words`, icon: Eraser });
+            setTimeout(() => setCommandFeedback(null), 2000);
+         }
+      }
+      // 3. DETECT "UNDO" (Revert entire segment)
+      else if (['undo', 'scratch that', 'revert'].some(cmd => cleanText === cmd)) {
+        if (history.length > 0) {
+          const previousText = history[history.length - 1];
+          setText(previousText);
+          setHistory(prev => prev.slice(0, -1)); // Pop last state
+          setCommandFeedback({ text: "Undid last action", icon: RotateCcw });
+          setTimeout(() => setCommandFeedback(null), 2000);
+        }
+      } 
+      // 4. DETECT "CLEAR ALL"
+      else if (['clear all', 'delete all'].includes(cleanText)) {
+         setHistory(prev => [...prev, text]);
+         setText("");
+         setCommandFeedback({ text: "Cleared all text", icon: Sparkles });
+         setTimeout(() => setCommandFeedback(null), 2000);
+      }
+      // 5. NORMAL TEXT APPEND
+      else {
+        setHistory(prev => [...prev, text]); // Save state before modifying
+        setText((prev) => {
+          const spacer = prev.length > 0 && !prev.endsWith(' ') ? ' ' : '';
+          return prev + spacer + finalTranscript;
+        });
+      }
+      
+      resetTranscript();
+    }
+  }, [finalTranscript, resetTranscript]);
+
+  const toggleListening = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  };
+
+  const handleManualUndo = () => {
+    if (history.length > 0) {
+      const previousText = history[history.length - 1];
+      setText(previousText);
+      setHistory(prev => prev.slice(0, -1));
+    }
+  };
+
+  return (
+    <div className="relative w-full max-w-2xl">
+      
+      {/* Listening Indicator & Interim Text */}
+      <div 
+        className={`
+          absolute -top-14 left-0 z-20 flex items-center gap-3 px-4 py-2 rounded-xl 
+          bg-zinc-900 border border-zinc-800 shadow-xl backdrop-blur-md
+          transition-all duration-300 ease-out pointer-events-none
+          ${isListening ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}
+        `}
+      >
+        <span className="relative flex h-2 w-2 shrink-0">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+        </span>
+        <span className="text-xs font-medium text-zinc-300 truncate max-w-[200px]">
+          {interimTranscript || "Listening..."}
+        </span>
+      </div>
+
+      {/* Command Feedback Toast */}
+      <div 
+        className={`
+          absolute -top-14 right-0 z-20 flex items-center gap-2 px-4 py-2 rounded-xl 
+          bg-indigo-600 text-white shadow-lg shadow-indigo-500/20
+          transition-all duration-300 ease-out
+          ${commandFeedback ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}
+        `}
+      >
+        {commandFeedback && <commandFeedback.icon size={14} />}
+        <span className="text-xs font-bold">{commandFeedback?.text}</span>
+      </div>
+
+      {/* Text Area Container */}
+      <div className={`
+        relative group rounded-3xl bg-black border transition-all duration-500 overflow-hidden
+        ${isListening 
+            ? 'border-zinc-600 shadow-[0_0_40px_-10px_rgba(255,255,255,0.1)]' 
+            : 'border-zinc-800 hover:border-zinc-700'
+        }
+      `}>
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={placeholder}
+          className="w-full h-48 bg-transparent text-zinc-200 p-8 pr-20 resize-none focus:outline-none text-xl placeholder:text-zinc-700 font-light leading-relaxed custom-scrollbar"
+        />
+        
+        {/* Controls Overlay */}
+        <div className="absolute bottom-6 right-6 flex items-center gap-2">
+          
+          {/* Manual Undo Button */}
+          {history.length > 0 && (
+            <button 
+              onClick={handleManualUndo}
+              className="p-3 text-zinc-500 hover:text-zinc-300 transition-colors rounded-xl hover:bg-zinc-900/80 group/undo"
+              title="Undo (Say 'Undo')"
+            >
+              <RotateCcw size={18} className="group-hover/undo:-rotate-90 transition-transform" />
+            </button>
+          )}
+
+          {/* Clear Button */}
+          {text.length > 0 && (
+            <button 
+              onClick={() => {
+                 setHistory(prev => [...prev, text]);
+                 setText('');
+              }}
+              className="p-3 text-zinc-500 hover:text-red-400 transition-colors rounded-xl hover:bg-zinc-900/80"
+              title="Clear text"
+            >
+              <X size={18} />
+            </button>
+          )}
+
+          {/* Mic Toggle Button */}
+          <button
+            onClick={toggleListening}
+            className={`
+              flex items-center justify-center w-12 h-12 rounded-2xl transition-all duration-500 ml-2
+              ${isListening 
+                ? 'bg-red-500 text-white shadow-lg shadow-red-900/20 scale-110' 
+                : 'bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800'
+              }
+            `}
+          >
+            {isListening ? (
+              <Square size={16} fill="currentColor" className="animate-pulse" />
+            ) : (
+              <Mic size={20} />
+            )}
+          </button>
+        </div>
+      </div>
+      
+      {/* Helper Footer */}
+      <div className="mt-4 flex justify-between items-center text-xs text-zinc-600 px-4 font-medium">
+        <div className="flex gap-4">
+          <span>{text.length} characters</span>
+          <span className="hidden sm:inline opacity-50">Tip: Say "Delete last 3 words"</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded text-[10px]">Enter</span>
+          <span>to save</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- MAIN PAGE ---
+export default function SpeechDemo() {
+  return (
+    <div className="min-h-screen bg-neutral-950 flex flex-col items-center justify-center p-6 font-sans text-white selection:bg-zinc-800">
+      
+      <div className="mb-16 text-center space-y-2">
+        <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 mb-4">
+          <Mic size={18} className="text-zinc-400" />
+        </div>
+        <h1 className="text-4xl font-bold tracking-tighter text-white">Voice Notes</h1>
+        <p className="text-zinc-500 max-w-md mx-auto text-sm">
+          Speak naturally. Use commands like <span className="text-zinc-300">"Delete last word"</span> to edit.
+        </p>
+      </div>
+
+      <SpeechTextarea />
+
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #333;
+          border-radius: 2px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #555;
+        }
+      `}</style>
+    </div>
+  );
+}
